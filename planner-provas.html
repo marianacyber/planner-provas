@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Planner de provas</title>
+<style>
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
+--bg:#f6f3ee;--card:#fff;--ink:#1d1b19;--mute:#7a746c;--line:#e3ddd3;--lazer:#dff3e4;--lazer-ink:#1c6b3a;--prova:#ffe1dd;--prova-ink:#b3261e;--warn:#fff1c9;
+--GA:#3b6fd4;--FEMEC:#c2571a;--Fuv:#7a4fc4;--Ni:#0f8a8a}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#141311;--card:#1f1d1a;--ink:#f1ece4;--mute:#9a938a;--line:#33302b;--lazer:#173324;--lazer-ink:#7fd9a0;--prova:#3d1b18;--prova-ink:#ff9a90;--warn:#3a3114;--GA:#7aa2f0;--FEMEC:#f08d54;--Fuv:#b595f0;--Ni:#4fcfcf}}
+:root[data-theme="dark"]{--bg:#141311;--card:#1f1d1a;--ink:#f1ece4;--mute:#9a938a;--line:#33302b;--lazer:#173324;--lazer-ink:#7fd9a0;--prova:#3d1b18;--prova-ink:#ff9a90;--warn:#3a3114;--GA:#7aa2f0;--FEMEC:#f08d54;--Fuv:#b595f0;--Ni:#4fcfcf}
+*{box-sizing:border-box}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.4 "Trebuchet MS","Segoe UI",system-ui,sans-serif}
+main{max-width:640px;margin:0 auto;padding:20px 14px 60px}
+h1{font:700 28px/1.1 Georgia,"Times New Roman",serif;margin:0 0 4px}
+.sub{color:var(--mute);margin:0 0 14px;font-size:14px}
+.bar{height:8px;background:var(--line);border-radius:4px;overflow:hidden;margin-bottom:6px}
+.bar i{display:block;height:100%;width:0;background:var(--lazer-ink);transition:width .3s}
+.legend{display:flex;flex-wrap:wrap;gap:6px;margin:12px 0 4px}
+.chip{font-size:12px;font-weight:700;color:#fff;border-radius:99px;padding:2px 9px}
+h2{font:700 15px/1.2 Georgia,serif;margin:26px 0 8px;color:var(--mute)}
+.day{background:var(--card);border:1px solid var(--line);border-radius:12px;margin-bottom:8px;overflow:hidden}
+.day.prova{border-color:var(--prova-ink)}
+.dh{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;font-weight:700;border-bottom:1px solid var(--line)}
+.dh small{font-weight:400;color:var(--mute)}
+.day.prova .dh{background:var(--prova);color:var(--prova-ink)}
+.slot{display:flex;gap:10px;align-items:center;padding:8px 12px;cursor:pointer}
+.slot+.slot{border-top:1px dashed var(--line)}
+.slot input{width:20px;height:20px;accent-color:var(--lazer-ink);flex:none}
+.t{width:46px;font-size:13px;color:var(--mute);flex:none}
+.slot.lz{background:var(--lazer);color:var(--lazer-ink);font-weight:600}
+.slot.lz .t{color:var(--lazer-ink)}
+.slot.done .tx{text-decoration:line-through;opacity:.55}
+.warn{background:var(--warn);padding:8px 12px;font-size:13px}
+.tx{flex:1}
+</style>
+</head>
+<body>
+<main>
+<h1>Planner de provas</h1>
+<p class="sub">14/out a 4/dez · tarde com mais lazer · toque para marcar como feito</p>
+<div class="bar"><i id="bar"></i></div>
+<div class="sub" id="prog"></div>
+<div class="legend" id="legend"></div>
+<div id="root"></div>
+</main>
+<script>
+const SUBJ={GA:'Geometria Analítica',FEMEC:'FEMEC',Fuv:'Fuv',Ni:'Ni'};
+const LAZER=['série ou filme','jogar','sair com amigos','treino ou esporte','passeio','música','doces e descanso','churrasco / comer fora'];
+const MES=['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+const DIA=['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
+// Provas (12h-13h)
+const PROVA={1023:['GA'],1029:['FEMEC'],1030:['Fuv','Ni'],1117:['Ni'],1203:['FEMEC'],1204:['GA','Fuv']};
+// Dias específicos: [bloco1, bloco2]  (null = sem bloco)
+const FIX={1014:['GA','FEMEC'],1015:['GA','Fuv'],1016:['GA','Ni'],1017:['GA:exercícios',null],1018:['GA:revisão leve (30 min)',null],
+1019:['GA','FEMEC'],1020:['GA','Fuv'],1021:['GA:simulado','FEMEC'],1022:['GA:revisão leve',null],
+1024:['FEMEC',null],1025:['FEMEC:revisão leve',null],1026:['FEMEC','Fuv'],1027:['FEMEC:simulado','Ni'],1028:['FEMEC:revisão leve',null],
+1031:['Ni',null],1101:[null,null],1116:['Ni:revisão leve',null],1202:['FEMEC:revisão leve',null]};
+const ROD=['GA','FEMEC','Fuv'];
+let rod=0;
+function plan(m,d,dow){
+  const k=(m+1)*100+d;
+  if(PROVA[k])return{prova:PROVA[k]};
+  if(FIX[k])return{b:FIX[k]};
+  // regras por período
+  if(k>=1101&&k<=1116){
+    if(dow===0)return{b:[null,null]};
+    if(dow===6)return{b:['Ni',null]};
+    return{b:['Ni',ROD[rod++%3]+':manter em dia']};
+  }
+  if(k>=1118&&k<=1125){
+    if(dow===0)return{b:[null,null]};
+    if(dow===6)return{b:['FEMEC',null]};
+    return{b:['FEMEC','GA']};
+  }
+  if(k>=1126&&k<=1201){
+    if(dow===0)return{b:[null,null]};
+    if(dow===6)return{b:['FEMEC:simulado',null]};
+    return{b:['FEMEC:simulado','Fuv']};
+  }
+  return{b:[null,null]};
+}
+function chip(s){const n=s.split(':')[0];return `<span class="chip" style="background:var(--${n})">${n}</span>`}
+function label(s){const [n,x]=s.split(':');return `${chip(n)} ${x||'estudo'}`}
+let store={};try{store=JSON.parse(localStorage.getItem('planner-provas')||'{}')}catch(e){}
+function save(){try{localStorage.setItem('planner-provas',JSON.stringify(store))}catch(e){}}
+const root=document.getElementById('root');
+let html='',total=0,li=0,lastWeek='';
+document.getElementById('legend').innerHTML=Object.keys(SUBJ).map(n=>chip(n)+'').join('');
+for(let i=0;i<52;i++){
+  const dt=new Date(2026,9,14+i),m=dt.getMonth(),d=dt.getDate(),dow=dt.getDay();
+  const k=(m+1)*100+d,p=plan(m,d,dow);
+  // cabeçalho de semana (começa na quarta 14/out e em cada segunda)
+  if(i===0||dow===1){
+    const e=new Date(dt);e.setDate(d+(dow===0?0:7-dow));
+    html+=`<h2>Semana de ${d}/${MES[m]} a ${e.getDate()}/${MES[e.getMonth()]}</h2>`;
+  }
+  const slots=[];
+  if(p.prova){
+    slots.push(['13:30','Almoço e descanso',0]);
+    slots.push(['15:00',`Lazer livre: ${LAZER[li++%LAZER.length]}`,1]);
+    slots.push(['19:00',k===1029?'Fuv e Ni: só leitura leve':'Noite livre',0]);
+  }else{
+    const [b1,b2]=p.b;
+    if(b1)slots.push(['14:00',label(b1),0]);
+    if(b2)slots.push(['15:45',label(b2),0]);
+    const start=b2?'17:00':(b1?'15:30':'13:30');
+    slots.push([start,`Lazer: ${LAZER[li++%LAZER.length]} (resto do dia)`,1]);
+  }
+  const title=p.prova?`Prova ${p.prova.join(' + ')} · 12h`:'';
+  html+=`<div class="day ${p.prova?'prova':''}"><div class="dh"><span>${DIA[dow]} ${d}/${MES[m]}</span><small>${title?`<b>${title}</b>`:''}</small></div>`;
+  if(p.prova&&p.prova.length>1)html+=`<div class="warn">⚠️ Duas provas no mesmo horário. Confirmar a data no calendário.</div>`;
+  slots.forEach((s,j)=>{
+    const id=k+'-'+j;total++;
+    html+=`<label class="slot ${s[2]?'lz':''} ${store[id]?'done':''}"><input type="checkbox" data-id="${id}" ${store[id]?'checked':''}><span class="t">${s[0]}</span><span class="tx">${s[1]}</span></label>`;
+  });
+  html+='</div>';
+}
+root.innerHTML=html;
+function upd(){
+  const n=Object.values(store).filter(Boolean).length;
+  document.getElementById('bar').style.width=(100*n/total)+'%';
+  document.getElementById('prog').textContent=`${n} de ${total} itens feitos`;
+}
+root.addEventListener('change',e=>{
+  const c=e.target;if(!c.dataset.id)return;
+  store[c.dataset.id]=c.checked;c.closest('.slot').classList.toggle('done',c.checked);save();upd();
+});
+upd();
+</script>
+</body>
+</html>
